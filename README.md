@@ -16,6 +16,8 @@ pip install -r requirements.txt
 
 Requires [LM Studio](https://lmstudio.ai/) running locally with the fine-tuned model loaded, serving an OpenAI-compatible API at `http://localhost:1234`.
 
+**Phase 3a onward** additionally requires the [Stockfish](https://stockfishchess.org/download/) engine binary. This is *not* installed via pip — download the binary for your platform and place it locally (e.g. `bin/stockfish.exe`); the agent connects to it via an explicit file path, so no system-wide install or PATH changes are needed.
+
 ## Project structure
 
 ```
@@ -32,8 +34,8 @@ chess-referee-agent/
   - **Key finding:** the model hallucinates a FEN board position even when one is explicitly provided in the system prompt with an instruction never to guess. See [`docs/PHASE1.md`](docs/PHASE1.md) for the full writeup.
   - **Architectural decision:** the model will never receive or generate FEN. Board state is held server-side; the model only ever proposes a move in UCI notation.
 - [x] **Phase 2 — Agent loop.** The model reacts to a tool result and makes a follow-up decision — e.g., suggesting a correction on an illegal move, ~~or requesting a position evaluation via Stockfish~~ on a legal one.
-- [ ] **Phase 3 — Multiple tools + memory.** Combine move validation, position evaluation, and opening recognition into one agent, with conversation history retained across turns.
-
+- [ ] **Phase 3a — Stockfish integration.** A third tool for position evaluation on legal moves, following the same helper+dispatch pattern as move validation. Requires a local Stockfish binary (see Setup).
+- [ ] **Phase 3b — Conversation memory.** `ask()` currently rebuilds message history from scratch on every call; board state persists but conversation context doesn't. Separated from 3a to avoid conflating two independent architectural changes.
 ## Related
 
 - [`chess-finetune-qwen`](https://github.com/iBerkS/chess-finetune-qwen) — the fine-tuned model this project is built on, including the cross-lingual and reasoning limitations that motivated this agent architecture.
