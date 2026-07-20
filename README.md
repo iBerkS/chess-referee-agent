@@ -31,7 +31,7 @@ chess-referee-agent/
 - [x] **Phase 1 — Single tool call.** Verified the full round-trip: model receives a request, generates a tool call, the tool call is executed against a real `python-chess` board, and the result is fed back for a final response.
   - **Key finding:** the model hallucinates a FEN board position even when one is explicitly provided in the system prompt with an instruction never to guess. See [`docs/PHASE1.md`](docs/PHASE1.md) for the full writeup.
   - **Architectural decision:** the model will never receive or generate FEN. Board state is held server-side; the model only ever proposes a move in UCI notation.
-- [ ] **Phase 2 — Agent loop.** The model reacts to a tool result and makes a follow-up decision — e.g., suggesting a correction on an illegal move, or requesting a position evaluation via Stockfish on a legal one.
+- [x] **Phase 2 — Agent loop.** The model reacts to a tool result and makes a follow-up decision — e.g., suggesting a correction on an illegal move, ~~or requesting a position evaluation via Stockfish~~ on a legal one.
 - [ ] **Phase 3 — Multiple tools + memory.** Combine move validation, position evaluation, and opening recognition into one agent, with conversation history retained across turns.
 
 ## Related

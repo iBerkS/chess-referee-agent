@@ -54,10 +54,44 @@ için gerçekten oynanabilir hamlelerin listesini de ekleyecek (örn.
 hipotez: seçme, üretmeden daha güvenilir olmalı, bir sonraki testte bunu
 ölçeceğiz.
 
+## `legal_moves_for_piece` ipucu — sonuç doğrulandı
+
+`_execute_tool_call`, illegal çıkan hamlenin kalkış karesine göre filtrelenmiş
+gerçek legal hamle listesini (`m.from_square == move.from_square`) sonuca
+eklendi. Aynı b1b3 senaryosu tekrar çalıştırıldı:
+
+1. `check_move_legality("b1b3")` → `{"legal": false, "legal_moves_for_piece":
+   ["b1c3", "b1a3"]}`
+2. Model listeden doğrudan seçim yaptı (`make_move("b1c3")`), yeni bir tahmin
+   **üretmedi** — önceki testteki anlamsız `c6e5` tahmini bir daha çıkmadı.
+   `make_move` `success: true` döndü.
+3. Modelin son cümlesi ("atı b1'den c3'e taşıdım") ile gerçek board durumu
+   birebir örtüştü — önceki testte modelin gerçekleşmemiş bir hamleyi
+   ("g8f7'ye taşıdım") başarılı gibi rapor ettiği yalan burada tekrarlanmadı.
+
+**Hipotez doğrulandı: seçme, üretmeden daha güvenilir.** Model'e doğru
+seçenekleri sunduğumuzda hem doğru seçim yapıyor hem de bulduktan sonraki
+iddiası gerçekle tutarlı kalıyor — ikinci kazanç (iddia-gerçek tutarlılığı)
+öngörülenden fazla, sadece doğru hamle bulma değil, raporlama güvenilirliği
+de düzeldi.
+
+**Açık soru (çözüldü):** İpucu hem `check_move_legality` hem `make_move`
+sonucuna eklendi (ortak kod yolu üzerinden) — ayrım yapmaya gerek kalmadı.
+
 ## Sıradaki adım
 
-1. `_execute_tool_call`'a `legal_moves_for_piece` alanını ekle
-2. Aynı b1b3 senaryosunu tekrar çalıştır, model ipucuyla doğru hamleyi
-   buluyor mu diye bak
-3. Açık soru: ipucu sadece illegal *tool* sonuçlarında mı verilsin, yoksa
-   `check_move_legality` de aynı bilgiyi mi taşısın — henüz karar verilmedi
+- Faz 2'nin çekirdek döngüsü (retry + ipucu) işlevsel olarak tamamlandı,
+  **Faz 2 burada kapanıyor.**
+- Kapsam kararı: CLAUDE.md'nin orijinal Faz 2 tanımındaki Stockfish
+  yönlendirmesi bu fazdan çıkarıldı, Faz 3'e taşındı. Faz 3'ün kendisi de
+  ikiye bölündü, çünkü "çoklu araç" ve "konuşma hafızası" birbirinden
+  bağımsız iki mimari değişiklik — aynı anda yapılırsa hata ayıklama
+  karışır (Faz 2'de debug print eksikliğinden yanlış yorumlama örneği
+  yaşandı, aynı riskin tekrarı istenmiyor):
+  - **Faz 3a — Stockfish:** üçüncü tool, mevcut helper+dispatch pattern'ine
+    (`_check_legality` / `_execute_tool_call`) oturtularak eklenecek. Legal
+    hamlede pozisyon değerlendirmesine yönlendirme burada tamamlanacak.
+  - **Faz 3b — Konuşma hafızası:** `ask()` şu an her çağrıldığında
+    `messages`'ı sıfırdan kuruyor, board state (`self.board`) kalıcı ama
+    konuşma geçmişi değil. Bu, yeni bir state-yönetim tasarımı gerektiriyor,
+    Stockfish pattern'inden bağımsız — Faz 3a'dan sonra ele alınacak.

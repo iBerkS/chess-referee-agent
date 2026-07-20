@@ -109,12 +109,29 @@ class ChessAgent:
         if move is None:
             return json.dumps({"error": f"'{move_uci}' geçerli bir UCI formatı değil"})
 
+        # Illegal ise, aynı kalkış karesinden gerçekten oynanabilir hamleleri
+        # de ekliyoruz - model "hangi taşı oynatmak istediğini" doğru bildi,
+        # sadece hedef kareyi yanlış tahmin etti; bu durumda motorun bildiği
+        # doğru cevabı sunuyoruz, modelin yeniden tahmin etmesini beklemiyoruz.
+        legal_hint = None
+        if not is_legal:
+            legal_hint = [
+                m.uci() for m in self.board.legal_moves
+                if m.from_square == move.from_square
+            ]
+
         if func_name == "check_move_legality":
-            return json.dumps({"legal": is_legal})
+            result = {"legal": is_legal}
+            if legal_hint is not None:
+                result["legal_moves_for_piece"] = legal_hint
+            return json.dumps(result)
 
         elif func_name == "make_move":
             if not is_legal:
-                return json.dumps({"success": False, "reason": "illegal move"})
+                result = {"success": False, "reason": "illegal move"}
+                if legal_hint is not None:
+                    result["legal_moves_for_piece"] = legal_hint
+                return json.dumps(result)
             self.board.push(move)
             return json.dumps({"success": True, "new_fen": self.board.fen()})
 
