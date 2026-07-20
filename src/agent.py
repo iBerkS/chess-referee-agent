@@ -2,6 +2,7 @@ import requests
 import json
 import chess
 
+MAX_TURNS = 10
 LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
 MODEL_NAME = "qwen-satrancprosu"
 
@@ -25,6 +26,23 @@ TOOLS = [
                 "required": ["move"]
             }
         }
+    },
+    {
+    "type": "function",
+    "function": {
+        "name": "make_move",
+        "description": "Plays a move on the board if it is legal. Use this after confirming legality, or when the user explicitly asks to play a move.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "move": {
+                    "type": "string",
+                    "description": "The move to play, in UCI notation (e.g. 'e2e4')."
+                }
+            },
+            "required": ["move"]
+        }
+    }
     }
 ]
 
@@ -38,6 +56,21 @@ class ChessAgent:
     tutuluyor - Faz 2'de art arda birden fazla hamle oynanacağı için bu state'in
     fonksiyon çağrıları arasında kalıcı olması gerekiyor, bu yüzden class kullandık.
     """
+
+    def _check_legality(self, move_uci):
+        """
+        Bir UCI string'ini parse edip legal mi diye kontrol eder.
+        Format hatasında (örn. 'xyz') exception'ı burada yakalayıp
+        None döner - çağıran taraf None görürse "format bozuk" anlar.
+        Legal/illegal ayrımı ayrı bir bool olarak dönüyor.
+        """
+        try:
+            move = chess.Move.from_uci(move_uci)
+        except Exception:
+            return None, False  # (move objesi yok, legal değil)
+
+        is_legal = move in self.board.legal_moves
+        return move, is_legal
 
     def __init__(self, fen=None):
         # fen verilmezse chess.Board() otomatik standart başlangıç pozisyonunu kurar
@@ -67,46 +100,58 @@ class ChessAgent:
         return response.json()["choices"][0]["message"]
 
     def _execute_tool_call(self, tool_call):
+        func_name = tool_call["function"]["name"]
         args = json.loads(tool_call["function"]["arguments"])
         move_uci = args["move"]
 
-        try:
-            move = chess.Move.from_uci(move_uci)
-            is_legal = move in self.board.legal_moves
+        move, is_legal = self._check_legality(move_uci)
+
+        if move is None:
+            return json.dumps({"error": f"'{move_uci}' geçerli bir UCI formatı değil"})
+
+        if func_name == "check_move_legality":
             return json.dumps({"legal": is_legal})
-        except Exception as e:
-            # Format bozuksa (örn. 'xyz' gibi anlamsız bir string) buraya düşer
-            return json.dumps({"error": str(e)})
+
+        elif func_name == "make_move":
+            if not is_legal:
+                return json.dumps({"success": False, "reason": "illegal move"})
+            self.board.push(move)
+            return json.dumps({"success": True, "new_fen": self.board.fen()})
+
+
 
     def ask(self, user_content):
-        # Modele gönderdiğimiz FEN'in gerçekte nasıl bir pozisyona karşılık
-        # geldiğini insan gözüyle doğrulamak için tahtayı burada yazdırıyoruz.
-        # str(self.board) çağrısı, Board class'ının __str__ metodunu tetikler
-        # (print(board) yazınca da arka planda aynı şey oluyor).
         print("--- Modelin gördüğü pozisyon (FEN'in insan-okur hali) ---")
         print(self.board)
         print(f"FEN: {self.board.fen()}\n")
 
         messages = [self._system_message(), {"role": "user", "content": user_content}]
 
-        assistant_message = self._call_model(messages)
+        for tur in range(MAX_TURNS):
+            assistant_message = self._call_model(messages)
+            messages.append(assistant_message)
 
-        # Model tool çağırmadıysa (nadiren olur ama olabilir) direkt cevabı dön
-        if not assistant_message.get("tool_calls"):
-            return assistant_message["content"]
+            print(f"--- Tur {tur + 1}: modelin tool çağrısı (ham) ---")
+            print(json.dumps(assistant_message, indent=2, ensure_ascii=False))
 
-        tool_call = assistant_message["tool_calls"][0]
-        tool_result = self._execute_tool_call(tool_call)
+            if not assistant_message.get("tool_calls"):
+                print("--- Döngü sonu, gerçek board durumu ---")
+                print(self.board)
+                print(f"FEN: {self.board.fen()}")
+                return assistant_message["content"]
 
-        messages.append(assistant_message)
-        messages.append({
-            "role": "tool",
-            "tool_call_id": tool_call["id"],
-            "content": tool_result
-        })
+            for tool_call in assistant_message["tool_calls"]:
+                tool_result = self._execute_tool_call(tool_call)
+                print(f"    -> tool sonucu ({tool_call['function']['name']}): {tool_result}")
 
-        final_message = self._call_model(messages)
-        return final_message["content"]
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call["id"],
+                    "content": tool_result
+                })
+
+        # Buraya geldiysek MAX_TURNS bitti ama model hâlâ tool çağırıyor demektir
+        return "Model, verilen tur limiti içinde kesin bir cevaba ulaşamadı."
 
 
 if __name__ == "__main__":
@@ -115,8 +160,8 @@ if __name__ == "__main__":
     agent = ChessAgent()
 
     answer = agent.ask(
-        "Check if the move 'b1b3' (UCI notation) is legal. "
-        "Do not interpret or correct the move - pass it exactly as given."
+        "I want to move my knight from b1 to b3. If that's not a legal move, "
+        "figure out a legal knight move instead and play it."
     )
     print("--- Nihai cevap ---")
     print(answer)
