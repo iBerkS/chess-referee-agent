@@ -21,3 +21,6 @@ Thumbs.db
 
 # Jupyter notebook checkpoints (varsa ileride notebook eklenirse)
 .ipynb_checkpoints/
+
+#stockfih
+bin/
