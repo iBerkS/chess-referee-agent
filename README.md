@@ -34,8 +34,12 @@ chess-referee-agent/
   - **Key finding:** the model hallucinates a FEN board position even when one is explicitly provided in the system prompt with an instruction never to guess. See [`docs/PHASE1.md`](docs/PHASE1.md) for the full writeup.
   - **Architectural decision:** the model will never receive or generate FEN. Board state is held server-side; the model only ever proposes a move in UCI notation.
 - [x] **Phase 2 — Agent loop.** The model reacts to a tool result and makes a follow-up decision — e.g., suggesting a correction on an illegal move, ~~or requesting a position evaluation via Stockfish~~ on a legal one.
-- [ ] **Phase 3a — Stockfish integration.** A third tool for position evaluation on legal moves, following the same helper+dispatch pattern as move validation. Requires a local Stockfish binary (see Setup).
-- [ ] **Phase 3b — Conversation memory.** `ask()` currently rebuilds message history from scratch on every call; board state persists but conversation context doesn't. Separated from 3a to avoid conflating two independent architectural changes.
-## Related
+  - **Key finding:** blind retry alone isn't enough — after an illegal move, the model's next guess was no more reliable than its first (e.g. proposing a move from a square with no piece on it). See [`docs/PHASE2.md`](docs/PHASE2.md).
+  - **Fix:** tool results now include the actual legal moves for the piece in question when a move is illegal, turning the retry into a selection task rather than a generation task — verified to resolve the inconsistency.
+- [x] **Phase 3a — Stockfish integration.** A third tool for position evaluation on legal moves, following the same helper+dispatch pattern as move validation. Requires a local Stockfish binary (see Setup).
+  - **Key finding:** an ambiguous illegal-move reason (empty hint list) was indistinguishable from "no legal moves for this piece" vs. "it's not this piece's turn" — the model filled the gap with invented rules. See [`docs/PHASE3.md`](docs/PHASE3.md).
+  - **Known limitation:** the model occasionally states an intention without calling the corresponding tool, or misdescribes a move's piece/square in its final response — likely a capacity limit of the 7B model rather than a fixable prompting issue.
+- [x] **Phase 3b — Conversation memory.** `ask()` currently rebuilds message history from scratch on every call; board state persists but conversation context doesn't. Separated from 3a to avoid conflating two independent architectural changes.
+  - **Verified:** the agent correctly recalls context several turns back (e.g. "what was the very first move of this game?") without re-deriving it from board state. See [`docs/PHASE3B.md`](docs/PHASE3B.md).## Related
 
 - [`chess-finetune-qwen`](https://github.com/iBerkS/chess-finetune-qwen) — the fine-tuned model this project is built on, including the cross-lingual and reasoning limitations that motivated this agent architecture.

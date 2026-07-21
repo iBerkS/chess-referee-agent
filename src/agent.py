@@ -95,10 +95,12 @@ class ChessAgent:
         return move, False, reason
 
     def __init__(self, fen=None):
-        # fen verilmezse chess.Board() otomatik standart başlangıç pozisyonunu kurar
+
         self.board = chess.Board(fen) if fen else chess.Board()
 
         self.engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
+
+        self.messages = []
 
     def close(self):
         self.engine.quit()
@@ -171,18 +173,20 @@ class ChessAgent:
             self.board.push(move)
             return json.dumps({"success": True, "new_fen": self.board.fen()})
 
-
-
     def ask(self, user_content):
         print("--- Modelin gördüğü pozisyon (FEN'in insan-okur hali) ---")
         print(self.board)
         print(f"FEN: {self.board.fen()}\n")
 
-        messages = [self._system_message(), {"role": "user", "content": user_content}]
+        self.messages.append({"role": "user", "content": user_content})
 
         for tur in range(MAX_TURNS):
-            assistant_message = self._call_model(messages)
-            messages.append(assistant_message)
+            messages_for_call = [self._system_message()] + self.messages
+            approx_chars = sum(len(json.dumps(m)) for m in messages_for_call)
+            print(f"    [debug] yaklaşık payload boyutu: {approx_chars} karakter (~{approx_chars // 4} token)")
+
+            assistant_message = self._call_model(messages_for_call)
+            self.messages.append(assistant_message)
 
             print(f"--- Tur {tur + 1}: modelin tool çağrısı (ham) ---")
             print(json.dumps(assistant_message, indent=2, ensure_ascii=False))
@@ -197,26 +201,22 @@ class ChessAgent:
                 tool_result = self._execute_tool_call(tool_call)
                 print(f"    -> tool sonucu ({tool_call['function']['name']}): {tool_result}")
 
-                messages.append({
+                self.messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call["id"],
                     "content": tool_result
                 })
 
-        # Buraya geldiysek MAX_TURNS bitti ama model hâlâ tool çağırıyor demektir
         return "Model, verilen tur limiti içinde kesin bir cevaba ulaşamadı."
 
 
 if __name__ == "__main__":
-    # Bu blok, dosya direkt çalıştırıldığında (import edildiğinde değil) devreye girer -
-    # Java'daki 'public static void main' ile aynı işlevi görüyor.
     agent = ChessAgent()
 
-    answer = agent.ask(
-        "I want to move my knight from b1 to b3. If that's not legal, "
-        "play a legal knight move instead. Also, feel free to develop "
-        "another piece at the same time if you think it helps."
-    )
-    print("--- Nihai cevap ---")
-    print(answer)
+    print(">>> 1"); print(agent.ask("Play e2e4."))
+    print(">>> 2"); print(agent.ask("Now play e7e5 for black."))
+    print(">>> 3"); print(agent.ask("Which move did we just play?"))
+    print(">>> 4"); print(agent.ask("What was the very first move of this game?"))
+    print(">>> 5"); print(agent.ask("Who's better right now, and by how much?"))
+
     agent.close()
