@@ -42,4 +42,11 @@ chess-referee-agent/
 - [x] **Phase 3b — Conversation memory.** `ask()` currently rebuilds message history from scratch on every call; board state persists but conversation context doesn't. Separated from 3a to avoid conflating two independent architectural changes.
   - **Verified:** the agent correctly recalls context several turns back (e.g. "what was the very first move of this game?") without re-deriving it from board state. See [`docs/PHASE3B.md`](docs/PHASE3B.md).## Related
 
+## Evals
+
+Alongside the phase-based development log, this project includes a small eval system (`tests/evals/`) to measure how *consistently* the model behaves across repeated runs, rather than relying on one-off manual testing. Unlike the deterministic unit-test mindset, evals here score the model statistically — each scenario is run N times (default 5) and scored as a pass rate per check, since the same prompt can produce different tool-call behavior across runs.
+
+- **Findings so far:** intent-to-action follow-through (stating a move but not calling the tool) and move-description accuracy (misnaming the piece just moved) are the weakest measured behaviors (0-33% pass rate); rule-hallucination avoidance and turn efficiency are consistently strong (100%).
+- See [`docs/EVALS.md`](docs/EVALS.md) for the full methodology, results table, and known limitations of the eval harness itself.
+
 - [`chess-finetune-qwen`](https://github.com/iBerkS/chess-finetune-qwen) — the fine-tuned model this project is built on, including the cross-lingual and reasoning limitations that motivated this agent architecture.
